@@ -12,8 +12,8 @@
 <div class="project-container">
     <div class="project-header">
         <h2 class="project-title">Актуальные проекты</h2>
-        {% if projects %}
-            <a href="/projects/create-project" class="black-button">+ Создать проект</a>
+        {% if request.user.is_authenticated %}
+            <a href="{% url 'projects:create' %}" class="black-button">+ Создать проект</a>
         {% endif %}
     </div>
     <p class="project-subtitle">Найдите интересный проект и присоединитесь к команде</p>
@@ -22,42 +22,30 @@
         <span class="filter-label">Фильтр по необходимым навыкам:</span>
         <div class="filter-chips">
             {% for skill in all_skills %}
-            <a href="?skill={{ skill }}"
-               class="filter-chip {% if active_skill == skill %}active{% endif %}">
-                {{ skill }}
+            <a href="?skill={{ skill.name|urlencode }}"
+               class="filter-chip {% if active_skill == skill.name %}active{% endif %}">
+                {{ skill.name }}
             </a>
             {% endfor %}
             {% if active_skill %}
-            <a href="/projects/list" class="filter-reset">Сбросить</a>
+            <a href="{% url 'projects:list' %}" class="filter-reset">Сбросить</a>
             {% endif %}
         </div>
     </div>
 
     <div class="projects-grid">
-        {% for project in page_obj %}
+        {% for project in projects %}
         {% include 'includes/project-card.html' %}
         {% empty %}
+        {% if request.user.is_authenticated %}
         {% include 'includes/empty-project-card.html' with empty_title="Пока нет проектов" empty_message="Создавайте проекты и делитесь ими с другими пользователями!" button_link="/projects/create-project" button_text="+ Создать проект" %}
-        {% endfor %}
-    </div>
-    {% if page_obj.has_other_pages %}
-    <div class="pagination">
-        {% if page_obj.has_previous %}
-        <a href="?{{ query_prefix }}page={{ page_obj.previous_page_number }}" class="page-btn">←</a>
-        {% endif %}
-        {% for num in page_obj.paginator.page_range %}
-        {% if page_obj.number == num %}
-        <span class="page-btn active">{{ num }}</span>
         {% else %}
-        <a href="?{{ query_prefix }}page={{ num }}" class="page-btn">{{ num }}</a>
+        {% include 'includes/empty-project-card.html' with empty_title="Пока нет проектов" empty_message="Проекты по выбранному фильтру не найдены." button_link="/projects/list" button_text="Сбросить фильтр" %}
         {% endif %}
         {% endfor %}
-        {% if page_obj.has_next %}
-        <a href="?{{ query_prefix }}page={{ page_obj.next_page_number }}" class="page-btn">→</a>
-        {% endif %}
     </div>
-    {% endif %}
-    {% include 'includes/project-fav-toggle.js' %}
+
+    {% include 'includes/pagination.html' with page_obj=projects pagination_skill=active_skill %}
 </div>
 
 {% endblock %}

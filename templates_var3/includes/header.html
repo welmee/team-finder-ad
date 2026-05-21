@@ -45,6 +45,7 @@
         </div>
     </div>
 </header>
+{% if request.user.is_authenticated %}
 <div id="userSidebar" class="user-sidebar">
     <div class="sidebar-content">
         <a href="/users/{{ request.user.id }}/"><span>{% include 'includes/svg/profile.html' %} Мой профиль</span></a>
@@ -59,3 +60,4 @@
         <a href="/users/logout/"><span style="color: #e7000b;">{% include 'includes/svg/leave.html' %} Выйти</span></a>
     </div>
 </div>
+{% endif %}
