@@ -1,0 +1,10 @@
+NAME_MAX_LENGTH = 124
+SURNAME_MAX_LENGTH = 124
+PHONE_MAX_LENGTH = 12
+ABOUT_MAX_LENGTH = 256
+
+URL_NAME_REGISTER = "users:register"
+URL_NAME_LOGIN = "users:login"
+URL_NAME_LIST = "users:list"
+URL_NAME_DETAIL = "users:detail"
+URL_NAME_PROJECTS_LIST = "projects:list"

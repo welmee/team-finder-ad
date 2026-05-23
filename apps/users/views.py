@@ -1,8 +1,10 @@
-from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 
+from team_finder.pagination import paginate_queryset
+
+from .constants import URL_NAME_PROJECTS_LIST
 from .forms import ChangePasswordForm, EditProfileForm, LoginForm, RegisterForm
 
 User = get_user_model()
@@ -11,14 +13,9 @@ User = get_user_model()
 def register_view(request):
     form = RegisterForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        user = User.objects.create_user(
-            email=form.cleaned_data["email"],
-            name=form.cleaned_data["name"],
-            surname=form.cleaned_data["surname"],
-            password=form.cleaned_data["password"],
-        )
+        user = form.save()
         login(request, user)
-        return redirect("projects:list")
+        return redirect(URL_NAME_PROJECTS_LIST)
     return render(request, "users/register.html", {"form": form})
 
 
@@ -32,14 +29,14 @@ def login_view(request):
         )
         if user is not None:
             login(request, user)
-            return redirect("projects:list")
+            return redirect(URL_NAME_PROJECTS_LIST)
         form.add_error(None, "Неверный email или пароль")
     return render(request, "users/login.html", {"form": form})
 
 
 def logout_view(request):
     logout(request)
-    return redirect("projects:list")
+    return redirect(URL_NAME_PROJECTS_LIST)
 
 
 def user_detail_view(request, pk):
@@ -49,8 +46,7 @@ def user_detail_view(request, pk):
 
 def participants_view(request):
     queryset = User.objects.all().order_by("-id")
-    paginator = Paginator(queryset, 12)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj = paginate_queryset(request, queryset)
     return render(request, "users/participants.html", {"participants": page_obj})
 
 

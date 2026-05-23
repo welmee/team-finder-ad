@@ -1,11 +1,25 @@
 import json
+from http import HTTPStatus
 
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from team_finder.pagination import paginate_queryset
+
+from .constants import (
+    JSON_STATUS_ERROR,
+    JSON_STATUS_OK,
+    MSG_INVALID_JSON,
+    MSG_NOT_FOUND,
+    MSG_PROJECT_ALREADY_COMPLETED,
+    MSG_SKILL_ID_OR_NAME_REQUIRED,
+    MSG_SKILL_NOT_LINKED,
+    PROJECT_STATUS_CLOSED,
+    PROJECT_STATUS_OPEN,
+    SKILLS_AUTOCOMPLETE_LIMIT,
+)
 from .forms import ProjectForm
 from .models import Project, Skill
 
@@ -21,8 +35,7 @@ def project_list_view(request):
     if active_skill:
         projects = projects.filter(skills__name=active_skill).distinct()
 
-    paginator = Paginator(projects, 12)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj = paginate_queryset(request, projects)
 
     return render(request, "projects/project_list.html", {
         "projects": page_obj,
@@ -61,48 +74,59 @@ def edit_project_view(request, pk):
     return render(request, "projects/create-project.html", {"form": form, "is_edit": True})
 
 
+def _json_not_found(message=MSG_NOT_FOUND):
+    return JsonResponse({"error": message}, status=HTTPStatus.NOT_FOUND)
+
+
 @login_required
 @require_POST
 def complete_project_view(request, pk):
-    project = get_object_or_404(Project, pk=pk, owner=request.user)
-    if project.status != "open":
+    project = Project.objects.filter(pk=pk, owner=request.user).first()
+    if project is None:
+        return _json_not_found()
+    if project.status != PROJECT_STATUS_OPEN:
         return JsonResponse(
-            {"status": "error", "message": "Проект уже завершён"},
-            status=400,
+            {"status": JSON_STATUS_ERROR, "message": MSG_PROJECT_ALREADY_COMPLETED},
+            status=HTTPStatus.BAD_REQUEST,
         )
-    project.status = "closed"
+    project.status = PROJECT_STATUS_CLOSED
     project.save(update_fields=["status"])
-    return JsonResponse({"status": "ok", "project_status": "closed"})
+    return JsonResponse({"status": JSON_STATUS_OK, "project_status": PROJECT_STATUS_CLOSED})
 
 
 @login_required
 @require_POST
 def toggle_participate_view(request, pk):
-    project = get_object_or_404(Project, pk=pk)
+    project = Project.objects.filter(pk=pk).first()
+    if project is None:
+        return _json_not_found()
     user = request.user
-    if project.participants.filter(pk=user.pk).exists():
+    was_participating = project.participants.filter(pk=user.pk).exists()
+    if was_participating:
         project.participants.remove(user)
-        participating = False
     else:
         project.participants.add(user)
-        participating = True
-    return JsonResponse({"status": "ok", "participant": participating})
+    return JsonResponse({"status": JSON_STATUS_OK, "participant": not was_participating})
 
 
 def skills_autocomplete_view(request):
-    q = request.GET.get("q", "").strip()
-    skills = Skill.objects.filter(name__istartswith=q).order_by("name")[:10]
+    query = request.GET.get("q", "").strip()
+    skills = Skill.objects.filter(name__istartswith=query).order_by("name")[
+        :SKILLS_AUTOCOMPLETE_LIMIT
+    ]
     return JsonResponse(list(skills.values("id", "name")), safe=False)
 
 
 @login_required
 @require_POST
 def add_skill_view(request, pk):
-    project = get_object_or_404(Project, pk=pk, owner=request.user)
+    project = Project.objects.filter(pk=pk, owner=request.user).first()
+    if project is None:
+        return _json_not_found()
     try:
         body = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+        return JsonResponse({"error": MSG_INVALID_JSON}, status=HTTPStatus.BAD_REQUEST)
 
     skill_id = body.get("skill_id")
     name = body.get("name", "").strip()
@@ -110,11 +134,16 @@ def add_skill_view(request, pk):
     added = False
 
     if skill_id:
-        skill = get_object_or_404(Skill, pk=skill_id)
+        skill = Skill.objects.filter(pk=skill_id).first()
+        if skill is None:
+            return _json_not_found()
     elif name:
         skill, created = Skill.objects.get_or_create(name=name)
     else:
-        return JsonResponse({"error": "skill_id or name required"}, status=400)
+        return JsonResponse(
+            {"error": MSG_SKILL_ID_OR_NAME_REQUIRED},
+            status=HTTPStatus.BAD_REQUEST,
+        )
 
     if not project.skills.filter(pk=skill.pk).exists():
         project.skills.add(skill)
@@ -130,12 +159,16 @@ def add_skill_view(request, pk):
 @login_required
 @require_POST
 def remove_skill_view(request, pk, skill_id):
-    project = get_object_or_404(Project, pk=pk, owner=request.user)
-    skill = get_object_or_404(Skill, pk=skill_id)
+    project = Project.objects.filter(pk=pk, owner=request.user).first()
+    if project is None:
+        return _json_not_found()
+    skill = Skill.objects.filter(pk=skill_id).first()
+    if skill is None:
+        return _json_not_found()
     if not project.skills.filter(pk=skill.pk).exists():
         return JsonResponse(
-            {"status": "error", "message": "Навык не привязан к проекту"},
-            status=400,
+            {"status": JSON_STATUS_ERROR, "message": MSG_SKILL_NOT_LINKED},
+            status=HTTPStatus.BAD_REQUEST,
         )
     project.skills.remove(skill)
-    return JsonResponse({"status": "ok"})
+    return JsonResponse({"status": JSON_STATUS_OK})

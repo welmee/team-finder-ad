@@ -1,9 +1,16 @@
 from django.conf import settings
 from django.db import models
 
+from .constants import (
+    PROJECT_STATUS_CHOICES,
+    PROJECT_STATUS_MAX_LENGTH,
+    PROJECT_STATUS_OPEN,
+    SKILL_NAME_MAX_LENGTH,
+)
+
 
 class Skill(models.Model):
-    name = models.CharField(max_length=124, unique=True)
+    name = models.CharField(max_length=SKILL_NAME_MAX_LENGTH, unique=True)
 
     class Meta:
         verbose_name = "Навык"
@@ -15,11 +22,6 @@ class Skill(models.Model):
 
 
 class Project(models.Model):
-    STATUS_CHOICES = [
-        ("open", "Open"),
-        ("closed", "Closed"),
-    ]
-
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     owner = models.ForeignKey(
@@ -29,7 +31,11 @@ class Project(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     github_url = models.URLField(blank=True)
-    status = models.CharField(max_length=6, choices=STATUS_CHOICES, default="open")
+    status = models.CharField(
+        max_length=PROJECT_STATUS_MAX_LENGTH,
+        choices=PROJECT_STATUS_CHOICES,
+        default=PROJECT_STATUS_OPEN,
+    )
     participants = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name="participated_projects",

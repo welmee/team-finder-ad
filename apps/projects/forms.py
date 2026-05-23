@@ -1,12 +1,9 @@
 from django import forms
-from django.core.exceptions import ValidationError
 
+from team_finder.validators import validate_github_url
+
+from .constants import PROJECT_STATUS_CLOSED, PROJECT_STATUS_OPEN
 from .models import Project
-
-
-def validate_github_url(value):
-    if value and "github.com" not in value:
-        raise ValidationError("Ссылка должна вести на github.com.")
 
 
 class ProjectForm(forms.ModelForm):
@@ -16,7 +13,10 @@ class ProjectForm(forms.ModelForm):
         label="Ссылка на GitHub",
     )
     status = forms.ChoiceField(
-        choices=[("open", "Открыт"), ("closed", "Закрыт")],
+        choices=[
+            (PROJECT_STATUS_OPEN, "Открыт"),
+            (PROJECT_STATUS_CLOSED, "Закрыт"),
+        ],
         label="Статус",
     )
 

@@ -1,20 +1,18 @@
-import re
-
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
+from team_finder.validators import validate_github_url
+
+from .constants import NAME_MAX_LENGTH, SURNAME_MAX_LENGTH
+from .utils import normalize_phone
+
 User = get_user_model()
 
 
-def validate_github_url(value):
-    if value and "github.com" not in value:
-        raise ValidationError("Ссылка должна вести на github.com.")
-
-
 class RegisterForm(forms.Form):
-    name = forms.CharField(max_length=124, label="Имя")
-    surname = forms.CharField(max_length=124, label="Фамилия")
+    name = forms.CharField(max_length=NAME_MAX_LENGTH, label="Имя")
+    surname = forms.CharField(max_length=SURNAME_MAX_LENGTH, label="Фамилия")
     email = forms.EmailField(label="Email")
     password = forms.CharField(widget=forms.PasswordInput, label="Пароль")
 
@@ -24,6 +22,14 @@ class RegisterForm(forms.Form):
             raise ValidationError("Пользователь с таким email уже существует.")
         return email
 
+    def save(self):
+        return User.objects.create_user(
+            email=self.cleaned_data["email"],
+            name=self.cleaned_data["name"],
+            surname=self.cleaned_data["surname"],
+            password=self.cleaned_data["password"],
+        )
+
 
 class LoginForm(forms.Form):
     email = forms.EmailField(label="Email")
@@ -31,34 +37,24 @@ class LoginForm(forms.Form):
 
 
 class EditProfileForm(forms.ModelForm):
-    github_url = forms.URLField(required=False, validators=[validate_github_url], label="GitHub")
+    github_url = forms.URLField(
+        required=False,
+        validators=[validate_github_url],
+        label="GitHub",
+    )
 
     class Meta:
         model = User
         fields = ["name", "surname", "avatar", "about", "phone", "github_url"]
 
     def clean_phone(self):
-        phone = self.cleaned_data.get("phone", "").strip()
-        if not phone:
-            raise ValidationError("Телефон обязателен для заполнения.")
-        if phone.startswith("+7"):
-            phone = "8" + phone[2:]
-        elif phone.startswith("8"):
-            pass
-        else:
-            raise ValidationError(
-                "Телефон должен быть в формате 8XXXXXXXXXX или +7XXXXXXXXXX."
-            )
-        if not re.match(r"^8\d{10}$", phone):
-            raise ValidationError(
-                "Телефон должен быть в формате 8XXXXXXXXXX или +7XXXXXXXXXX."
-            )
-        qs = User.objects.filter(phone=phone)
-        if self.instance and self.instance.pk:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise ValidationError("Этот номер телефона уже используется другим пользователем.")
-        return phone
+        phone = self.cleaned_data.get("phone", "")
+        exclude_pk = self.instance.pk if self.instance and self.instance.pk else None
+        return normalize_phone(
+            phone,
+            exclude_user_pk=exclude_pk,
+            user_model=User,
+        )
 
 
 class ChangePasswordForm(forms.Form):
@@ -78,8 +74,8 @@ class ChangePasswordForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        p1 = cleaned.get("new_password1")
-        p2 = cleaned.get("new_password2")
-        if p1 and p2 and p1 != p2:
+        password1 = cleaned.get("new_password1")
+        password2 = cleaned.get("new_password2")
+        if password1 and password2 and password1 != password2:
             raise ValidationError("Новые пароли не совпадают.")
         return cleaned
